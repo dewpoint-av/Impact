@@ -144,6 +144,8 @@ namespace impact
 
     void TransientEngine::setParams (const Params& pp)
     {
+        if (pp == p)
+            return;   // nothing changed -> skip re-computing crossovers/band gains
         p = pp;
         updateCoeffs (fs);
     }

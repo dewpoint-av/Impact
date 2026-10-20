@@ -31,6 +31,19 @@ namespace impact
         float punch      = 0.0f;   // 0..1
         float mix        = 1.0f;   // 0..1
         float output     = 1.0f;   // 0..2
+
+        bool operator== (const Params& o) const
+        {
+            return lowAttack   == o.lowAttack
+                && lowSustain  == o.lowSustain
+                && midAttack   == o.midAttack
+                && midSustain  == o.midSustain
+                && highAttack  == o.highAttack
+                && highSustain == o.highSustain
+                && punch       == o.punch
+                && mix         == o.mix
+                && output      == o.output;
+        }
     };
 
     // One-pole envelope follower.
