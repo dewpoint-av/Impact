@@ -144,6 +144,7 @@ namespace impact
                 b.prepare (fs);
 
         vizFollower.prepare (fs, 0.005f, 0.150f);
+        limiter.prepare (fs);
 
         vizInBuf.assign (kVizSize, 0.0f);
         vizTransBuf.assign (kVizSize, 0.0f);
@@ -162,6 +163,7 @@ namespace impact
             for (auto& b : s)
                 b.reset();
         vizFollower.reset();
+        limiter.reset();
 
         transientLevel.store (0.0f);
         for (auto& l : bandLevel) l.store (0.0f);
@@ -245,8 +247,11 @@ namespace impact
             vizBandBuf[1][static_cast<size_t> (w)] = bandAcc[1] * 0.5f;
             vizBandBuf[2][static_cast<size_t> (w)] = bandAcc[2] * 0.5f;
 
-            outL[i] = std::tanh (out[0]);
-            outR[i] = std::tanh (out[1]);
+            float lo = out[0];
+            float ro = out[1];
+            limiter.process (lo, ro);
+            outL[i] = lo;
+            outR[i] = ro;
         }
 
         for (int b = 0; b < kNumBands; ++b)
