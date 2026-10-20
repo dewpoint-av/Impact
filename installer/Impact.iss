@@ -1,7 +1,7 @@
 ; Impact — Inno Setup installer
 
 #define MyAppName "Impact"
-#define MyAppVersion "1.0.4"
+#define MyAppVersion "1.0.5"
 #define MyAppPublisher "Dewpoint AV"
 #define MyAppURL "https://dewpoint.live"
 
