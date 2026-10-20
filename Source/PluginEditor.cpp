@@ -11,6 +11,8 @@ namespace
     juce::String signedPctText (float v) { return (v >= 0.0f ? "+" : "") + juce::String (v * 100.0f, 0) + " %"; }
     juce::String pctText       (float v) { return juce::String (v * 100.0f, 0) + " %"; }
     juce::String gainText      (float v) { return juce::String (v, 2) + "x"; }
+    juce::String msText        (float v) { return juce::String (v, 0) + " ms"; }
+    juce::String hzText        (float v) { return juce::String (v, 0) + " Hz"; }
 
     class Knob : public juce::Component,
                  private juce::AudioProcessorValueTreeState::Listener
@@ -24,8 +26,8 @@ namespace
         {
             slider.setSliderStyle (juce::Slider::Rotary);
             slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-            slider.setRotaryParameters ({ juce::MathConstants<float>::pi * 0.75f,
-                                          juce::MathConstants<float>::pi * 2.25f,
+            slider.setRotaryParameters ({ juce::MathConstants<float>::pi * 1.25f,
+                                          juce::MathConstants<float>::pi * 2.75f,
                                           true });
             addAndMakeVisible (slider);
 
@@ -134,6 +136,57 @@ namespace
         int band;
     };
 
+    // A tiny per-band oscilloscope.
+    class BandScope : public juce::Component,
+                      private juce::Timer
+    {
+    public:
+        BandScope (ImpactAudioProcessor& p, int bandIndex)
+            : proc (p), band (bandIndex)
+        {
+            startTimerHz (30);
+        }
+
+        ~BandScope() override { stopTimer(); }
+
+        void timerCallback() override { repaint(); }
+
+        void paint (juce::Graphics& g) override
+        {
+            auto b = getLocalBounds().toFloat().reduced (1.0f);
+            g.setColour (SympathyLookAndFeel::panel.brighter (0.07f));
+            g.fillRoundedRectangle (b, 5.0f);
+
+            const auto& buf = proc.getEngine().vizBand (band);
+            const int wp = proc.getEngine().vizWritePos();
+            const int n = static_cast<int> (buf.size());
+            if (n == 0)
+                return;
+
+            const float midY = b.getCentreY();
+            const float amp  = b.getHeight() * 0.48f;
+
+            juce::Path p;
+            for (int i = 0; i < n; ++i)
+            {
+                const int idx = (wp + i) % n;
+                const float x = b.getX() + static_cast<float> (i) / (n - 1) * b.getWidth();
+                const float y = midY - buf[static_cast<size_t> (idx)] * amp;
+                if (i == 0)
+                    p.startNewSubPath (x, y);
+                else
+                    p.lineTo (x, y);
+            }
+
+            g.setColour (SympathyLookAndFeel::accent.withAlpha (0.80f));
+            g.strokePath (p, juce::PathStrokeType (1.3f));
+        }
+
+    private:
+        ImpactAudioProcessor& proc;
+        int band;
+    };
+
     void layoutKnobs (std::vector<std::unique_ptr<Knob>>& knobs, int cols,
                       juce::Rectangle<int> area, int gapX, int gapY)
     {
@@ -179,10 +232,13 @@ public:
 
     std::array<std::unique_ptr<Panel>, 3> bandPanels;
     std::array<std::vector<std::unique_ptr<Knob>>, 3> bandKnobs;
+    std::array<std::unique_ptr<BandScope>, 3> bandScopes;
     std::array<std::unique_ptr<LevelMeter>, 3> bandMeters;
 
     std::unique_ptr<Panel> globalPanel;
     std::vector<std::unique_ptr<Knob>> globalKnobs;
+    std::unique_ptr<juce::ComboBox> punchModeBox;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> punchModeAttachment;
 
     void build()
     {
@@ -218,12 +274,22 @@ public:
             bandKnobs[i].push_back (std::make_unique<Knob> (processor.getParameters(),
                 sustainIds[i], "SUSTAIN", signedPctText));
             bandKnobs[i].push_back (std::make_unique<Knob> (processor.getParameters(),
-                lengthIds[i], "LENGTH", pctText));
+                lengthIds[i], "TRANS LEN", msText));
+            bandScopes[i] = std::make_unique<BandScope> (processor, i);
             bandMeters[i] = std::make_unique<LevelMeter> (processor, i);
         }
 
         globalPanel = std::make_unique<Panel> ("GLOBAL");
+        punchModeBox = std::make_unique<juce::ComboBox> ("PunchMode");
+        punchModeBox->addItemList (juce::StringArray ({ "Attack", "Snap", "Thump", "Crisp" }), 1);
+        punchModeBox->setSelectedId (1, juce::dontSendNotification);
+        punchModeBox->setJustificationType (juce::Justification::centred);
+        punchModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
+            processor.getParameters(), "punchMode", *punchModeBox);
+
         globalKnobs.push_back (std::make_unique<Knob> (processor.getParameters(), "punch", "PUNCH", pctText));
+        globalKnobs.push_back (std::make_unique<Knob> (processor.getParameters(), "crossoverLow", "LOW XOVER", hzText));
+        globalKnobs.push_back (std::make_unique<Knob> (processor.getParameters(), "crossoverHigh", "HIGH XOVER", hzText));
         globalKnobs.push_back (std::make_unique<Knob> (processor.getParameters(), "mix", "MIX", pctText));
         globalKnobs.push_back (std::make_unique<Knob> (processor.getParameters(), "output", "OUTPUT", gainText));
     }
@@ -239,12 +305,14 @@ public:
         for (int i = 0; i < 3; ++i)
         {
             root.addAndMakeVisible (*bandPanels[i]);
+            bandPanels[i]->addAndMakeVisible (*bandScopes[i]);
             for (auto& k : bandKnobs[i])
                 bandPanels[i]->addAndMakeVisible (*k);
             bandPanels[i]->addAndMakeVisible (*bandMeters[i]);
         }
 
         root.addAndMakeVisible (*globalPanel);
+        globalPanel->addAndMakeVisible (*punchModeBox);
         for (auto& k : globalKnobs)
             globalPanel->addAndMakeVisible (*k);
     }
@@ -277,6 +345,9 @@ public:
 
             auto p = bandPanels[i]->getLocalBounds().reduced (12);
             p.removeFromTop (30);
+            auto scope = p.removeFromTop (46);
+            bandScopes[i]->setBounds (scope);
+            p.removeFromTop (6);
             auto meter = p.removeFromBottom (14);
             bandMeters[i]->setBounds (meter);
             p.removeFromBottom (6);
@@ -286,7 +357,10 @@ public:
         globalPanel->setBounds (b);
         auto gb = globalPanel->getLocalBounds().reduced (12);
         gb.removeFromTop (30);
-        layoutKnobs (globalKnobs, 3, gb, 6, 0);
+        auto modeRow = gb.removeFromTop (26);
+        punchModeBox->setBounds (modeRow);
+        gb.removeFromTop (8);
+        layoutKnobs (globalKnobs, 3, gb, 6, 8);
     }
 };
 
@@ -301,7 +375,7 @@ ImpactAudioProcessorEditor::ImpactAudioProcessorEditor (ImpactAudioProcessor& p)
     impl->attachTo (*this);
 
     setResizable (true, true);
-    setResizeLimits (720, 540, 1500, 1000);
+    setResizeLimits (720, 600, 1500, 1000);
     setSize (940, 620);
 }
 

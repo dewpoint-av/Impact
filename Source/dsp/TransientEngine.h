@@ -28,10 +28,13 @@ namespace impact
         float midSustain = 0.0f;
         float highAttack = 0.0f;
         float highSustain = 0.0f;
-        float lowLength  = 0.5f;   // 0..1  transient-detection length
-        float midLength  = 0.5f;
-        float highLength = 0.5f;
+        float lowLength  = 62.5f;  // ms  transient-detection length
+        float midLength  = 62.5f;
+        float highLength = 62.5f;
         float punch      = 0.0f;   // 0..1
+        int   punchMode  = 0;      // 0=Attack 1=Snap 2=Thump 3=Crisp
+        float crossoverLow  = 200.0f;   // Hz  low/mid split
+        float crossoverHigh = 3000.0f;  // Hz  mid/high split
         float mix        = 1.0f;   // 0..1
         float output     = 1.0f;   // 0..2
 
@@ -47,6 +50,9 @@ namespace impact
                 && midLength   == o.midLength
                 && highLength  == o.highLength
                 && punch       == o.punch
+                && punchMode   == o.punchMode
+                && crossoverLow  == o.crossoverLow
+                && crossoverHigh == o.crossoverHigh
                 && mix         == o.mix
                 && output      == o.output;
         }
@@ -67,25 +73,7 @@ namespace impact
         float env = 0.0f;
     };
 
-    // Per-band transient shaper.
-    class BandShaper
-    {
-    public:
-        void prepare (double fs);
-        void reset();
-        void setParams (float attack, float sustain, float punch, float length);
-        float process (float x);
-
-    private:
-        EnvelopeFollower slow;   // sustain body
-        EnvelopeFollower fast;   // punch transient
-        double fs = 48000.0;
-        float attack = 0.0f;
-        float sustain = 0.0f;
-        float punch = 0.0f;
-    };
-
-    // RBJ biquad crossover (Butterworth Q).
+    // RBJ biquad (Butterworth Q) — used for crossovers and punch shaping.
     class Biquad
     {
     public:
@@ -99,6 +87,26 @@ namespace impact
         float z1 = 0.0f, z2 = 0.0f;
     };
 
+    // Per-band transient shaper.
+    class BandShaper
+    {
+    public:
+        void prepare (double fs);
+        void reset();
+        void setParams (float attack, float sustain, float punch, int punchMode, float lengthMs);
+        float process (float x);
+
+    private:
+        EnvelopeFollower slow;   // sustain body
+        EnvelopeFollower fast;   // punch transient
+        Biquad transientFilt;    // shapes the punch transient (Thump/Crisp)
+        double fs = 48000.0;
+        float attack = 0.0f;
+        float sustain = 0.0f;
+        float punch = 0.0f;
+        int   punchMode = 0;
+    };
+
     class TransientEngine
     {
     public:
@@ -110,6 +118,7 @@ namespace impact
 
         const std::vector<float>& vizIn() const        { return vizInBuf; }
         const std::vector<float>& vizTransient() const { return vizTransBuf; }
+        const std::vector<float>& vizBand (int b) const { return vizBandBuf[static_cast<size_t> (b)]; }
         int  vizWritePos() const                       { return vizWrite.load(); }
 
         float getTransientLevel() const { return transientLevel.load(); }
@@ -132,6 +141,7 @@ namespace impact
 
         std::vector<float> vizInBuf;
         std::vector<float> vizTransBuf;
+        std::array<std::vector<float>, kNumBands> vizBandBuf;
         std::atomic<int> vizWrite { 0 };
 
         std::atomic<float> transientLevel { 0.0f };

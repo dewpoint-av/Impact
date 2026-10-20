@@ -48,17 +48,24 @@ namespace impact
     {
         slow.reset();
         fast.reset();
+        transientFilt.reset();
     }
 
-    void BandShaper::setParams (float a, float s, float punchAmount, float length)
+    void BandShaper::setParams (float a, float s, float punchAmount, int punchMode_, float lengthMs)
     {
-        attack  = a;
-        sustain = s;
-        punch   = punchAmount;
+        attack    = a;
+        sustain   = s;
+        punch     = punchAmount;
+        punchMode = punchMode_;
 
-        // "Length" controls the transient-detection window (fast envelope release).
-        const float lenSec = 0.005f + length * 0.115f;   // 5ms .. 120ms
+        // "Transient Length" (ms) controls the transient-detection window
+        // (the fast envelope release).
+        const float lenSec = std::clamp (lengthMs * 0.001f, 0.001f, 0.2f);
         fast.setTimes (fs, 0.0005f, lenSec);
+
+        // Punch mode colours the punch transient.
+        if (punchMode == 2)      transientFilt.setLowpass  (fs, 160.0f);   // Thump
+        else if (punchMode == 3) transientFilt.setHighpass (fs, 2500.0f);  // Crisp
     }
 
     float BandShaper::process (float x)
@@ -66,7 +73,15 @@ namespace impact
         const float s  = slow.process (x);   // sustain envelope
         const float t  = x - s;              // transient
         const float f  = fast.process (x);   // fast envelope
-        const float ft = x - f;              // punch transient
+        float ft = x - f;                    // punch transient
+
+        switch (punchMode)
+        {
+            case 1:  ft = std::copysign (std::fabs (ft), x); break;   // Snap (rectified)
+            case 2:
+            case 3:  ft = transientFilt.process (ft);          break;  // Thump / Crisp
+            default: break;                                             // Attack (linear)
+        }
 
         return x + s * sustain + t * attack + ft * punch;
     }
@@ -132,6 +147,7 @@ namespace impact
 
         vizInBuf.assign (kVizSize, 0.0f);
         vizTransBuf.assign (kVizSize, 0.0f);
+        for (auto& v : vizBandBuf) v.assign (kVizSize, 0.0f);
         vizWrite.store (0);
 
         updateCoeffs (fs);
@@ -162,15 +178,17 @@ namespace impact
 
     void TransientEngine::updateCoeffs (double sampleRate)
     {
-        // Fixed crossovers: low/mid 200 Hz, mid/high 3 kHz.
-        for (auto& f : lp) f.setLowpass (sampleRate, 200.0f);
-        for (auto& f : hp) f.setHighpass (sampleRate, 3000.0f);
+        // Adjustable crossovers.
+        const float lo = std::clamp (p.crossoverLow,  50.0f, 1000.0f);
+        const float hi = std::clamp (p.crossoverHigh, lo + 100.0f, 12000.0f);
+        for (auto& f : lp) f.setLowpass  (sampleRate, lo);
+        for (auto& f : hp) f.setHighpass (sampleRate, hi);
 
         for (int ch = 0; ch < 2; ++ch)
         {
-            shaper[ch][0].setParams (p.lowAttack,  p.lowSustain,  p.punch, p.lowLength);
-            shaper[ch][1].setParams (p.midAttack,  p.midSustain,  p.punch, p.midLength);
-            shaper[ch][2].setParams (p.highAttack, p.highSustain, p.punch, p.highLength);
+            shaper[ch][0].setParams (p.lowAttack,  p.lowSustain,  p.punch, p.punchMode, p.lowLength);
+            shaper[ch][1].setParams (p.midAttack,  p.midSustain,  p.punch, p.punchMode, p.midLength);
+            shaper[ch][2].setParams (p.highAttack, p.highSustain, p.punch, p.punchMode, p.highLength);
         }
     }
 
@@ -198,6 +216,7 @@ namespace impact
 
             // Per channel: 3-band split + per-band shaping.
             float out[2];
+            float bandAcc[kNumBands] = { 0.0f, 0.0f, 0.0f };
             for (int ch = 0; ch < 2; ++ch)
             {
                 const float x = (ch == 0) ? il : ir;
@@ -210,6 +229,10 @@ namespace impact
                 const float m = shaper[ch][1].process (mid);
                 const float h = shaper[ch][2].process (high);
 
+                bandAcc[0] += l;
+                bandAcc[1] += m;
+                bandAcc[2] += h;
+
                 maxBand[0] = std::max (maxBand[0], std::fabs (l));
                 maxBand[1] = std::max (maxBand[1], std::fabs (m));
                 maxBand[2] = std::max (maxBand[2], std::fabs (h));
@@ -217,6 +240,10 @@ namespace impact
                 const float wet = l + m + h;
                 out[ch] = ((1.0f - p.mix) * x + p.mix * wet) * p.output;
             }
+
+            vizBandBuf[0][static_cast<size_t> (w)] = bandAcc[0] * 0.5f;
+            vizBandBuf[1][static_cast<size_t> (w)] = bandAcc[1] * 0.5f;
+            vizBandBuf[2][static_cast<size_t> (w)] = bandAcc[2] * 0.5f;
 
             outL[i] = std::tanh (out[0]);
             outR[i] = std::tanh (out[1]);

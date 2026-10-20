@@ -19,14 +19,20 @@ ImpactAudioProcessor::ImpactAudioProcessor()
                 -1.0f, 1.0f, 0.0f),
             std::make_unique<juce::AudioParameterFloat> ("highSustain", "High Sustain",
                 -1.0f, 1.0f, 0.0f),
-            std::make_unique<juce::AudioParameterFloat> ("lowLength", "Low Length",
-                0.0f, 1.0f, 0.5f),
-            std::make_unique<juce::AudioParameterFloat> ("midLength", "Mid Length",
-                0.0f, 1.0f, 0.5f),
-            std::make_unique<juce::AudioParameterFloat> ("highLength", "High Length",
-                0.0f, 1.0f, 0.5f),
+            std::make_unique<juce::AudioParameterFloat> ("lowLength", "Low Transient Length",
+                juce::NormalisableRange<float> (5.0f, 120.0f, 0.0f, 0.5f), 62.5f),
+            std::make_unique<juce::AudioParameterFloat> ("midLength", "Mid Transient Length",
+                juce::NormalisableRange<float> (5.0f, 120.0f, 0.0f, 0.5f), 62.5f),
+            std::make_unique<juce::AudioParameterFloat> ("highLength", "High Transient Length",
+                juce::NormalisableRange<float> (5.0f, 120.0f, 0.0f, 0.5f), 62.5f),
             std::make_unique<juce::AudioParameterFloat> ("punch", "Punch",
                 0.0f, 1.0f, 0.0f),
+            std::make_unique<juce::AudioParameterChoice> ("punchMode", "Punch Mode",
+                juce::StringArray ({ "Attack", "Snap", "Thump", "Crisp" }), 0),
+            std::make_unique<juce::AudioParameterFloat> ("crossoverLow", "Low Crossover",
+                juce::NormalisableRange<float> (80.0f, 1000.0f, 0.0f, 0.4f), 200.0f),
+            std::make_unique<juce::AudioParameterFloat> ("crossoverHigh", "High Crossover",
+                juce::NormalisableRange<float> (1000.0f, 12000.0f, 0.0f, 0.4f), 3000.0f),
             std::make_unique<juce::AudioParameterFloat> ("mix", "Mix",
                 0.0f, 1.0f, 1.0f),
             std::make_unique<juce::AudioParameterFloat> ("output", "Output",
@@ -124,6 +130,9 @@ void ImpactAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     p.midLength   = param ("midLength");
     p.highLength  = param ("highLength");
     p.punch       = param ("punch");
+    p.punchMode   = juce::roundToInt (param ("punchMode"));
+    p.crossoverLow  = param ("crossoverLow");
+    p.crossoverHigh = param ("crossoverHigh");
     p.mix         = param ("mix");
     p.output      = param ("output");
 
