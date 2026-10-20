@@ -2,6 +2,7 @@
 
 #include "TransientVisualizer.h"
 #include "HoloLogo.h"
+#include "AudioSpheres.h"
 
 #include <cmath>
 #include <functional>
@@ -229,6 +230,8 @@ public:
     juce::Label footer;
 
     std::unique_ptr<TransientVisualizer> visualizer;
+    std::unique_ptr<SpectrogramSphere> leftSphere;
+    std::unique_ptr<SpectrumSphere> rightSphere;
 
     std::array<std::unique_ptr<Panel>, 3> bandPanels;
     std::array<std::vector<std::unique_ptr<Knob>>, 3> bandKnobs;
@@ -260,6 +263,13 @@ public:
         footer.setJustificationType (juce::Justification::centred);
 
         visualizer = std::make_unique<TransientVisualizer> (processor);
+
+        leftSphere = std::make_unique<SpectrogramSphere> (
+            &processor.getEngine().vizIn(),
+            [this] { return processor.getEngine().vizWritePos(); });
+        rightSphere = std::make_unique<SpectrumSphere> (
+            &processor.getEngine().vizIn(),
+            [this] { return processor.getEngine().vizWritePos(); });
 
         const char* bandNames[3] = { "LOW", "MID", "HIGH" };
         const char* attackIds[3]  = { "lowAttack",  "midAttack",  "highAttack"  };
@@ -300,6 +310,8 @@ public:
         root.addAndMakeVisible (subtitle);
         root.addAndMakeVisible (brand);
         root.addAndMakeVisible (footer);
+        root.addAndMakeVisible (*leftSphere);
+        root.addAndMakeVisible (*rightSphere);
         root.addAndMakeVisible (*visualizer);
 
         for (int i = 0; i < 3; ++i)
@@ -326,6 +338,13 @@ public:
         b.removeFromBottom (2);
 
         auto header = b.removeFromTop (92);
+        const int sphere = 76;
+        const int pad = 28;
+        const int sphereY = header.getY() + (header.getHeight() - sphere) / 2;
+        leftSphere->setBounds  (header.getX() + pad, sphereY, sphere, sphere);
+        rightSphere->setBounds (header.getRight() - pad - sphere, sphereY, sphere, sphere);
+
+        header = header.withTrimmedLeft (sphere + pad).withTrimmedRight (sphere + pad);
         brand.setBounds (header.removeFromTop (20));
         title->setBounds (header.removeFromTop (54));
         subtitle.setBounds (header);
