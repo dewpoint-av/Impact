@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Impact VERSION 1.0.2)
+project(Impact VERSION 1.0.3)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -38,6 +38,12 @@ clap_juce_extensions_plugin(TARGET Impact
 
 juce_generate_juce_header(Impact)
 
+# Embedded Monument Extended logotype fonts.
+juce_add_binary_data(ImpactBinaryData
+    SOURCES
+        Source/MonumentExtendedUltrabold.otf
+        Source/MonumentExtendedRegular.otf)
+
 target_sources(Impact
     PRIVATE
         Source/PluginProcessor.cpp
@@ -60,6 +66,7 @@ target_compile_definitions(Impact
 
 target_link_libraries(Impact
     PRIVATE
+        ImpactBinaryData
         juce::juce_audio_utils
         juce::juce_audio_devices
         juce::juce_audio_formats
