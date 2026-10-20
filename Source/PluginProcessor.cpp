@@ -19,6 +19,12 @@ ImpactAudioProcessor::ImpactAudioProcessor()
                 -1.0f, 1.0f, 0.0f),
             std::make_unique<juce::AudioParameterFloat> ("highSustain", "High Sustain",
                 -1.0f, 1.0f, 0.0f),
+            std::make_unique<juce::AudioParameterFloat> ("lowLength", "Low Length",
+                0.0f, 1.0f, 0.5f),
+            std::make_unique<juce::AudioParameterFloat> ("midLength", "Mid Length",
+                0.0f, 1.0f, 0.5f),
+            std::make_unique<juce::AudioParameterFloat> ("highLength", "High Length",
+                0.0f, 1.0f, 0.5f),
             std::make_unique<juce::AudioParameterFloat> ("punch", "Punch",
                 0.0f, 1.0f, 0.0f),
             std::make_unique<juce::AudioParameterFloat> ("mix", "Mix",
@@ -114,6 +120,9 @@ void ImpactAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     p.midSustain  = param ("midSustain");
     p.highAttack  = param ("highAttack");
     p.highSustain = param ("highSustain");
+    p.lowLength   = param ("lowLength");
+    p.midLength   = param ("midLength");
+    p.highLength  = param ("highLength");
     p.punch       = param ("punch");
     p.mix         = param ("mix");
     p.output      = param ("output");

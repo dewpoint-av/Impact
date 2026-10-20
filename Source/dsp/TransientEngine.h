@@ -28,6 +28,9 @@ namespace impact
         float midSustain = 0.0f;
         float highAttack = 0.0f;
         float highSustain = 0.0f;
+        float lowLength  = 0.5f;   // 0..1  transient-detection length
+        float midLength  = 0.5f;
+        float highLength = 0.5f;
         float punch      = 0.0f;   // 0..1
         float mix        = 1.0f;   // 0..1
         float output     = 1.0f;   // 0..2
@@ -40,6 +43,9 @@ namespace impact
                 && midSustain  == o.midSustain
                 && highAttack  == o.highAttack
                 && highSustain == o.highSustain
+                && lowLength   == o.lowLength
+                && midLength   == o.midLength
+                && highLength  == o.highLength
                 && punch       == o.punch
                 && mix         == o.mix
                 && output      == o.output;
@@ -51,6 +57,7 @@ namespace impact
     {
     public:
         void prepare (double fs, float attackSec, float releaseSec);
+        void setTimes (double fs, float attackSec, float releaseSec);
         void reset();
         float process (float x);
 
@@ -66,12 +73,13 @@ namespace impact
     public:
         void prepare (double fs);
         void reset();
-        void setParams (float attack, float sustain, float punch);
+        void setParams (float attack, float sustain, float punch, float length);
         float process (float x);
 
     private:
         EnvelopeFollower slow;   // sustain body
         EnvelopeFollower fast;   // punch transient
+        double fs = 48000.0;
         float attack = 0.0f;
         float sustain = 0.0f;
         float punch = 0.0f;

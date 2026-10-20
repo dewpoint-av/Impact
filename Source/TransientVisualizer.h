@@ -37,7 +37,7 @@ private:
     float time = 0.0f;
     float transient = 0.0f;
 
-    static constexpr int kMaxParticles = 150;
+    static constexpr int kMaxParticles = 220;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TransientVisualizer)
 };

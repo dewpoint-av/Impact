@@ -12,13 +12,15 @@ namespace
     juce::String pctText       (float v) { return juce::String (v * 100.0f, 0) + " %"; }
     juce::String gainText      (float v) { return juce::String (v, 2) + "x"; }
 
-    class Knob : public juce::Component
+    class Knob : public juce::Component,
+                 private juce::AudioProcessorValueTreeState::Listener
     {
     public:
         Knob (juce::AudioProcessorValueTreeState& state,
               const juce::String& paramId,
               const juce::String& name,
               std::function<juce::String (float)> textFn)
+            : stateRef (state), param (paramId), textFn (textFn)
         {
             slider.setSliderStyle (juce::Slider::Rotary);
             slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
@@ -38,14 +40,13 @@ namespace
             attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
                 state, paramId, slider);
 
-            slider.onValueChange = [this, textFn]
-            {
-                if (textFn)
-                    valueLabel.setText (textFn (static_cast<float> (slider.getValue())),
-                                        juce::dontSendNotification);
-            };
-            slider.onValueChange();
+            stateRef.addParameterListener (param, this);
+            refreshLabel();
         }
+
+        ~Knob() override { stateRef.removeParameterListener (param, this); }
+
+        void parameterChanged (const juce::String&, float) override { refreshLabel(); }
 
         void resized() override
         {
@@ -56,6 +57,17 @@ namespace
         }
 
     private:
+        void refreshLabel()
+        {
+            if (auto* p = dynamic_cast<juce::RangedAudioParameter*> (stateRef.getParameter (param)))
+                if (textFn)
+                    valueLabel.setText (textFn (p->getNormalisableRange().convertFrom0to1 (p->getValue())),
+                                        juce::dontSendNotification);
+        }
+
+        juce::AudioProcessorValueTreeState& stateRef;
+        juce::String param;
+        std::function<juce::String (float)> textFn;
         juce::Slider slider;
         juce::Label nameLabel;
         juce::Label valueLabel;
@@ -171,7 +183,7 @@ public:
 
     void build()
     {
-        title = std::make_unique<HoloTitle> ("IMPACT", 32.0f, true);
+        title = std::make_unique<HoloTitle> ("IMPACT", 42.0f, true);
 
         subtitle.setText ("MULTIBAND TRANSIENT SHAPER", juce::dontSendNotification);
         subtitle.setFont (juce::Font (12.0f, juce::Font::bold));
@@ -183,7 +195,7 @@ public:
         brand.setColour (juce::Label::textColourId, SympathyLookAndFeel::accent);
         brand.setJustificationType (juce::Justification::centredRight);
 
-        footer.setText ("DEWPOINT AV", juce::dontSendNotification);
+        footer.setText (juce::String ("DEWPOINT AV  ·  v") + juce::String (JucePlugin_VersionString), juce::dontSendNotification);
         footer.setFont (monumentFont (11.0f, false));
         footer.setColour (juce::Label::textColourId, SympathyLookAndFeel::muted);
         footer.setJustificationType (juce::Justification::centred);
@@ -193,6 +205,7 @@ public:
         const char* bandNames[3] = { "LOW", "MID", "HIGH" };
         const char* attackIds[3]  = { "lowAttack",  "midAttack",  "highAttack"  };
         const char* sustainIds[3] = { "lowSustain", "midSustain", "highSustain" };
+        const char* lengthIds[3]  = { "lowLength",  "midLength",  "highLength"  };
 
         for (int i = 0; i < 3; ++i)
         {
@@ -201,6 +214,8 @@ public:
                 attackIds[i], "ATTACK", signedPctText));
             bandKnobs[i].push_back (std::make_unique<Knob> (processor.getParameters(),
                 sustainIds[i], "SUSTAIN", signedPctText));
+            bandKnobs[i].push_back (std::make_unique<Knob> (processor.getParameters(),
+                lengthIds[i], "LENGTH", pctText));
             bandMeters[i] = std::make_unique<LevelMeter> (processor, i);
         }
 
@@ -239,7 +254,7 @@ public:
         footer.setBounds (b.removeFromBottom (18));
         b.removeFromBottom (2);
 
-        auto header = b.removeFromTop (46);
+        auto header = b.removeFromTop (58);
         title->setBounds (header.removeFromLeft (340));
         brand.setBounds (header.removeFromRight (220));
         subtitle.setBounds (header);
@@ -262,7 +277,7 @@ public:
             auto meter = p.removeFromBottom (14);
             bandMeters[i]->setBounds (meter);
             p.removeFromBottom (6);
-            layoutKnobs (bandKnobs[i], 2, p, 8, 0);
+            layoutKnobs (bandKnobs[i], 3, p, 6, 0);
         }
 
         globalPanel->setBounds (b);
@@ -294,7 +309,11 @@ ImpactAudioProcessorEditor::~ImpactAudioProcessorEditor()
 
 void ImpactAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (SympathyLookAndFeel::background);
+    const auto b = getLocalBounds().toFloat();
+    g.setGradientFill (juce::ColourGradient (
+        SympathyLookAndFeel::background.brighter (0.05f), b.getCentreX(), b.getCentreY(),
+        SympathyLookAndFeel::background, b.getWidth() * 0.65f, b.getHeight() * 0.65f, true));
+    g.fillAll();
 }
 
 void ImpactAudioProcessorEditor::resized()

@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-VERSION="1.0.3"
+VERSION="1.0.4"
 PAYLOAD="build/pkg-payload"
 OUT="installer/output/Impact-${VERSION}-mac.pkg"
 
@@ -30,7 +30,19 @@ mkdir -p installer/output
 rm -f "$OUT"
 
 echo "Building installer package..."
+mkdir -p build/scripts
+cat > build/scripts/preinstall <<'EOF'
+#!/bin/sh
+# Remove any previous installation before overwriting.
+rm -rf "/Library/Audio/Plug-Ins/VST3/Impact.vst3"
+rm -rf "/Library/Audio/Plug-Ins/Components/Impact.component"
+rm -rf "/Library/Audio/Plug-Ins/CLAP/Impact.clap"
+exit 0
+EOF
+chmod +x build/scripts/preinstall
+
 pkgbuild --root "$PAYLOAD" \
+    --scripts build/scripts \
     --identifier "com.dewpoint.Impact" \
     --version "$VERSION" \
     --install-location "/" \

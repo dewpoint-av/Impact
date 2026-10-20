@@ -1,7 +1,7 @@
 ; Impact — Inno Setup installer
 
 #define MyAppName "Impact"
-#define MyAppVersion "1.0.3"
+#define MyAppVersion "1.0.4"
 #define MyAppPublisher "Dewpoint AV"
 #define MyAppURL "https://dewpoint.live"
 
@@ -35,6 +35,10 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Files]
 Source: "..\build\dist\Impact.vst3\*"; DestDir: "{commoncf}\VST3\{#MyAppName}.vst3"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\build\dist\Impact.clap"; DestDir: "{commoncf}\CLAP"; Flags: ignoreversion
+
+[InstallDelete]
+Type: filesandordirs; Name: "{commoncf}\VST3\Impact.vst3"
+Type: files; Name: "{commoncf}\CLAP\Impact.clap"
 
 [Icons]
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"

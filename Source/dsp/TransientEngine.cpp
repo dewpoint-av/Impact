@@ -14,9 +14,14 @@ namespace impact
     // -----------------------------------------------------------------------
     void EnvelopeFollower::prepare (double fs, float attackSec, float releaseSec)
     {
+        setTimes (fs, attackSec, releaseSec);
+        reset();
+    }
+
+    void EnvelopeFollower::setTimes (double fs, float attackSec, float releaseSec)
+    {
         attackCoeff  = static_cast<float> (1.0 - std::exp (-1.0 / (attackSec * fs)));
         releaseCoeff = static_cast<float> (1.0 - std::exp (-1.0 / (releaseSec * fs)));
-        env = 0.0f;
     }
 
     void EnvelopeFollower::reset() { env = 0.0f; }
@@ -31,8 +36,9 @@ namespace impact
     // -----------------------------------------------------------------------
     // BandShaper
     // -----------------------------------------------------------------------
-    void BandShaper::prepare (double fs)
+    void BandShaper::prepare (double sampleRate)
     {
+        fs = sampleRate;
         slow.prepare (fs, 0.005f, 0.150f);   // sustain body
         fast.prepare (fs, 0.0005f, 0.025f);  // punch transient
         reset();
@@ -44,11 +50,15 @@ namespace impact
         fast.reset();
     }
 
-    void BandShaper::setParams (float a, float s, float punchAmount)
+    void BandShaper::setParams (float a, float s, float punchAmount, float length)
     {
         attack  = a;
         sustain = s;
         punch   = punchAmount;
+
+        // "Length" controls the transient-detection window (fast envelope release).
+        const float lenSec = 0.005f + length * 0.115f;   // 5ms .. 120ms
+        fast.setTimes (fs, 0.0005f, lenSec);
     }
 
     float BandShaper::process (float x)
@@ -158,9 +168,9 @@ namespace impact
 
         for (int ch = 0; ch < 2; ++ch)
         {
-            shaper[ch][0].setParams (p.lowAttack,  p.lowSustain,  p.punch);
-            shaper[ch][1].setParams (p.midAttack,  p.midSustain,  p.punch);
-            shaper[ch][2].setParams (p.highAttack, p.highSustain, p.punch);
+            shaper[ch][0].setParams (p.lowAttack,  p.lowSustain,  p.punch, p.lowLength);
+            shaper[ch][1].setParams (p.midAttack,  p.midSustain,  p.punch, p.midLength);
+            shaper[ch][2].setParams (p.highAttack, p.highSustain, p.punch, p.highLength);
         }
     }
 
