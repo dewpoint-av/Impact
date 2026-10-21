@@ -32,7 +32,7 @@ namespace
 TransientVisualizer::TransientVisualizer (ImpactAudioProcessor& p)
     : proc (p)
 {
-    startTimerHz (60);
+    startTimerHz (30);
 }
 
 TransientVisualizer::~TransientVisualizer()

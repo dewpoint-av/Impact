@@ -119,7 +119,7 @@ namespace
         LevelMeter (ImpactAudioProcessor& p, int bandIndex)
             : proc (p), band (bandIndex)
         {
-            startTimerHz (30);
+            startTimerHz (20);
         }
 
         ~LevelMeter() override { stopTimer(); }
@@ -151,7 +151,7 @@ namespace
         BandScope (ImpactAudioProcessor& p, int bandIndex)
             : proc (p), band (bandIndex)
         {
-            startTimerHz (30);
+            startTimerHz (20);
         }
 
         ~BandScope() override { stopTimer(); }
