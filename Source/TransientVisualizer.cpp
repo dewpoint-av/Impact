@@ -1,4 +1,4 @@
-#include "TransientVisualizer.h"
+﻿#include "TransientVisualizer.h"
 
 #include <algorithm>
 #include <cmath>
@@ -104,10 +104,10 @@ void TransientVisualizer::paint (juce::Graphics& g)
     auto plot = b.reduced (12.0f, 10.0f);
 
     auto header = plot.removeFromTop (16.0f);
-    g.setFont (juce::Font (12.0f, juce::Font::bold));
+    g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
     g.setColour (SympathyLookAndFeel::accent);
     g.drawText ("INPUT  +  TRANSIENT", header.removeFromLeft (200), juce::Justification::centredLeft, false);
-    g.setFont (juce::Font (10.0f, juce::Font::plain));
+    g.setFont (juce::FontOptions (10.0f, juce::Font::plain));
     g.setColour (SympathyLookAndFeel::muted);
     g.drawText ("cyan = transient  |  white = signal", header, juce::Justification::centredRight, false);
 

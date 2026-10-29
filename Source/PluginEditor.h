@@ -16,7 +16,6 @@ public:
     void resized() override;
 
 private:
-    ImpactAudioProcessor& processor;
     SympathyLookAndFeel lookAndFeel;
 
     class Impl;
