@@ -36,7 +36,9 @@ ImpactAudioProcessor::ImpactAudioProcessor()
             std::make_unique<juce::AudioParameterFloat> ("mix", "Mix",
                 0.0f, 1.0f, 1.0f),
             std::make_unique<juce::AudioParameterFloat> ("output", "Output",
-                0.0f, 2.0f, 1.0f)
+                0.0f, 2.0f, 1.0f),
+            std::make_unique<juce::AudioParameterBool> ("autoGain", "Auto Gain",
+                true)
         })
 {
 }
@@ -135,6 +137,7 @@ void ImpactAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     p.crossoverHigh = param ("crossoverHigh");
     p.mix         = param ("mix");
     p.output      = param ("output");
+    p.autoGain    = param ("autoGain") > 0.5f;
 
     engine.setParams (p);
     engine.process (inL, inR, outL, outR, numSamples);

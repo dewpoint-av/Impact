@@ -38,6 +38,7 @@ namespace impact
         float crossoverHigh = 3000.0f;  // Hz  mid/high split
         float mix        = 1.0f;   // 0..1
         float output     = 1.0f;   // 0..2
+        bool  autoGain   = true;   // compensate wet level to match dry
 
         bool operator== (const Params& o) const
         {
@@ -55,7 +56,8 @@ namespace impact
                 && crossoverLow  == o.crossoverLow
                 && crossoverHigh == o.crossoverHigh
                 && mix         == o.mix
-                && output      == o.output;
+                && output      == o.output
+                && autoGain    == o.autoGain;
         }
     };
 
@@ -88,6 +90,32 @@ namespace impact
         float z1 = 0.0f, z2 = 0.0f;
     };
 
+    // Signed one-pole envelope follower. Unlike EnvelopeFollower (which tracks
+    // magnitude), this follows the signal itself, so `x - env` is the actual
+    // transient and `env` is the sustained body.
+    class SignedEnvelopeFollower
+    {
+    public:
+        void prepare (double fs, float attackSec, float releaseSec) { setTimes (fs, attackSec, releaseSec); reset(); }
+        void setTimes (double fs, float attackSec, float releaseSec)
+        {
+            attackCoeff  = static_cast<float> (1.0 - std::exp (-1.0 / (attackSec * fs)));
+            releaseCoeff = static_cast<float> (1.0 - std::exp (-1.0 / (releaseSec * fs)));
+        }
+        void reset() { env = 0.0f; }
+
+        float process (float x)
+        {
+            env += (x > env ? attackCoeff : releaseCoeff) * (x - env);
+            return env;
+        }
+
+    private:
+        float attackCoeff = 0.0f;
+        float releaseCoeff = 0.0f;
+        float env = 0.0f;
+    };
+
     // Per-band transient shaper.
     class BandShaper
     {
@@ -98,9 +126,9 @@ namespace impact
         float process (float x);
 
     private:
-        EnvelopeFollower slow;   // sustain body
-        EnvelopeFollower fast;   // punch transient
-        Biquad transientFilt;    // shapes the punch transient (Thump/Crisp)
+        SignedEnvelopeFollower body;   // sustain body (release = total length)
+        EnvelopeFollower fast;         // punch transient (magnitude)
+        Biquad transientFilt;          // shapes the punch transient (Thump/Crisp)
         double fs = 48000.0;
         float attack = 0.0f;
         float sustain = 0.0f;
@@ -162,6 +190,37 @@ namespace impact
         float releaseCoeff = 0.0f;
     };
 
+    // Optional auto makeup gain: measures dry vs processed loudness and applies
+    // a slow makeup gain so the output loudness tracks the input. Fixes the
+    // "gets quieter when pushed hard" effect caused by the safety limiter.
+    class GainCompensator
+    {
+    public:
+        void prepare (double fs) { coeff = static_cast<float> (1.0 - std::exp (-1.0 / (0.15 * fs))); reset(); }
+        void reset() { inLvl = outLvl = 0.0f; gain = 1.0f; }
+
+        // Feed dry and processed magnitudes; returns the smoothed makeup gain.
+        float process (float dryMag, float wetMag)
+        {
+            inLvl  += coeff * (dryMag - inLvl);
+            outLvl += coeff * (wetMag - outLvl);
+
+            float target = 1.0f;
+            if (outLvl > 1.0e-4f && inLvl > 1.0e-4f)
+                target = inLvl / outLvl;
+
+            target = std::clamp (target, 0.25f, 4.0f);   // ±12 dB
+            gain += coeff * (target - gain);
+            return gain;
+        }
+
+    private:
+        float coeff = 0.0f;
+        float inLvl = 0.0f;
+        float outLvl = 0.0f;
+        float gain = 1.0f;
+    };
+
     class TransientEngine
     {
     public:
@@ -192,6 +251,7 @@ namespace impact
         Biquad hp[2];
         BandShaper shaper[2][kNumBands];
         StereoLimiter limiter;
+        GainCompensator agc;
 
         EnvelopeFollower vizFollower;
 

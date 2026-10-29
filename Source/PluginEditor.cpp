@@ -86,6 +86,67 @@ namespace
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
     };
 
+    // A small on/off toggle button (for boolean parameters like Auto Gain).
+    class ToggleButton : public juce::Component,
+                         private juce::AudioProcessorValueTreeState::Listener,
+                         private juce::AsyncUpdater
+    {
+    public:
+        ToggleButton (const juce::String& label, const juce::String& paramId,
+                      juce::AudioProcessorValueTreeState& st)
+            : name (label), param (paramId), state (st)
+        {
+            state.addParameterListener (param, this);
+        }
+
+        ~ToggleButton() override { state.removeParameterListener (param, this); }
+
+        void parameterChanged (const juce::String&, float) override { triggerAsyncUpdate(); }
+        void handleAsyncUpdate() override { repaint(); }
+
+        void paint (juce::Graphics& g) override
+        {
+            const bool on = isOn();
+            auto r = getLocalBounds().toFloat().reduced (1.5f);
+            const juce::Colour col = on ? SympathyLookAndFeel::accent : SympathyLookAndFeel::muted;
+
+            if (on)
+            {
+                g.setColour (col.withAlpha (0.15f));
+                g.fillRoundedRectangle (r, 7.0f);
+                g.setColour (col.withAlpha (0.65f));
+                g.drawRoundedRectangle (r.reduced (0.5f), 7.0f, 1.5f);
+            }
+            else
+            {
+                g.setColour (SympathyLookAndFeel::panel);
+                g.fillRoundedRectangle (r, 7.0f);
+                g.setColour (SympathyLookAndFeel::border);
+                g.drawRoundedRectangle (r.reduced (0.5f), 7.0f, 1.0f);
+            }
+
+            g.setFont (juce::FontOptions (10.0f, on ? juce::Font::bold : juce::Font::plain));
+            g.setColour (on ? SympathyLookAndFeel::text : SympathyLookAndFeel::muted);
+            g.drawText (on ? name + " ON" : name + " OFF", r, juce::Justification::centred, false);
+        }
+
+        void mouseDown (const juce::MouseEvent&) override
+        {
+            if (auto* p = state.getParameter (param))
+                p->setValueNotifyingHost (isOn() ? 0.0f : 1.0f);
+        }
+
+        bool isOn() const
+        {
+            return state.getRawParameterValue (param)->load() > 0.5f;
+        }
+
+    private:
+        juce::String name;
+        juce::String param;
+        juce::AudioProcessorValueTreeState& state;
+    };
+
     class Panel : public juce::Component
     {
     public:
@@ -248,6 +309,7 @@ public:
     std::vector<std::unique_ptr<Knob>> globalKnobs;
     std::unique_ptr<juce::ComboBox> punchModeBox;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> punchModeAttachment;
+    std::unique_ptr<ToggleButton> autoGainToggle;
 
     void build()
     {
@@ -290,7 +352,7 @@ public:
             bandKnobs[i].push_back (std::make_unique<Knob> (processor.getParameters(),
                 sustainIds[i], "SUSTAIN", signedPctText));
             bandKnobs[i].push_back (std::make_unique<Knob> (processor.getParameters(),
-                lengthIds[i], "TRANS LEN", msText));
+                lengthIds[i], "LENGTH", msText));
             bandScopes[i] = std::make_unique<BandScope> (processor, i);
             bandMeters[i] = std::make_unique<LevelMeter> (processor, i);
         }
@@ -308,6 +370,8 @@ public:
         globalKnobs.push_back (std::make_unique<Knob> (processor.getParameters(), "crossoverHigh", "HIGH XOVER", hzText));
         globalKnobs.push_back (std::make_unique<Knob> (processor.getParameters(), "mix", "MIX", pctText));
         globalKnobs.push_back (std::make_unique<Knob> (processor.getParameters(), "output", "OUTPUT", gainText));
+
+        autoGainToggle = std::make_unique<ToggleButton> ("AUTO GAIN", "autoGain", processor.getParameters());
     }
 
     void attachTo (juce::Component& root)
@@ -331,6 +395,7 @@ public:
 
         root.addAndMakeVisible (*globalPanel);
         globalPanel->addAndMakeVisible (*punchModeBox);
+        globalPanel->addAndMakeVisible (*autoGainToggle);
         for (auto& k : globalKnobs)
             globalPanel->addAndMakeVisible (*k);
     }
@@ -383,7 +448,8 @@ public:
         auto gb = globalPanel->getLocalBounds().reduced (12);
         gb.removeFromTop (30);
         auto modeRow = gb.removeFromTop (26);
-        punchModeBox->setBounds (modeRow);
+        punchModeBox->setBounds (modeRow.removeFromRight (static_cast<int> (modeRow.getWidth() * 0.62f)));
+        autoGainToggle->setBounds (modeRow);
         gb.removeFromTop (8);
         layoutKnobs (globalKnobs, 3, gb, 6, 8);
     }

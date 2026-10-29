@@ -39,14 +39,14 @@ namespace impact
     void BandShaper::prepare (double sampleRate)
     {
         fs = sampleRate;
-        slow.prepare (fs, 0.005f, 0.150f);   // sustain body
-        fast.prepare (fs, 0.0005f, 0.025f);  // punch transient
+        body.prepare (fs, 0.002f, 0.0625f);  // signed sustain body (release updated later)
+        fast.prepare (fs, 0.0005f, 0.015f);  // punch transient
         reset();
     }
 
     void BandShaper::reset()
     {
-        slow.reset();
+        body.reset();
         fast.reset();
         transientFilt.reset();
     }
@@ -58,10 +58,14 @@ namespace impact
         punch     = punchAmount;
         punchMode = punchMode_;
 
-        // "Transient Length" (ms) controls the transient-detection window
-        // (the fast envelope release).
-        const float lenSec = std::clamp (lengthMs * 0.001f, 0.001f, 0.2f);
-        fast.setTimes (fs, 0.0005f, lenSec);
+        // "Total length" (ms) = how long the sustain body extends: it is the
+        // release time of the signed body follower, so the Sustain gain affects
+        // the whole signal beyond the transient window (Bitwig-style).
+        const float lenSec = std::clamp (lengthMs * 0.001f, 0.005f, 0.5f);
+        body.setTimes (fs, 0.002f, lenSec);
+
+        // Punch uses its own fixed short window.
+        fast.setTimes (fs, 0.0005f, 0.015f);
 
         // Punch mode colours the punch transient.
         if (punchMode == 2)      transientFilt.setLowpass  (fs, 160.0f);   // Thump
@@ -70,8 +74,8 @@ namespace impact
 
     float BandShaper::process (float x)
     {
-        const float s  = slow.process (x);   // sustain envelope
-        const float t  = x - s;              // transient
+        const float b  = body.process (x);   // signed sustain body
+        const float t  = x - b;              // transient
         const float f  = fast.process (x);   // fast envelope
         float ft = x - f;                    // punch transient
 
@@ -83,7 +87,7 @@ namespace impact
             default: break;                                             // Attack (linear)
         }
 
-        return x + s * sustain + t * attack + ft * punch;
+        return x + b * sustain + t * attack + ft * punch;
     }
 
     // -----------------------------------------------------------------------
@@ -145,6 +149,7 @@ namespace impact
 
         vizFollower.prepare (fs, 0.005f, 0.150f);
         limiter.prepare (fs);
+        agc.prepare (fs);
 
         vizInBuf.assign (kVizSize, 0.0f);
         vizTransBuf.assign (kVizSize, 0.0f);
@@ -164,6 +169,7 @@ namespace impact
                 b.reset();
         vizFollower.reset();
         limiter.reset();
+        agc.reset();
 
         transientLevel.store (0.0f);
         for (auto& l : bandLevel) l.store (0.0f);
@@ -217,7 +223,7 @@ namespace impact
             vizWrite.store ((w + 1) % kVizSize);
 
             // Per channel: 3-band split + per-band shaping.
-            float out[2];
+            float wet[2];
             float bandAcc[kNumBands] = { 0.0f, 0.0f, 0.0f };
             for (int ch = 0; ch < 2; ++ch)
             {
@@ -239,8 +245,20 @@ namespace impact
                 maxBand[1] = std::max (maxBand[1], std::fabs (m));
                 maxBand[2] = std::max (maxBand[2], std::fabs (h));
 
-                const float wet = l + m + h;
-                out[ch] = ((1.0f - p.mix) * x + p.mix * wet) * p.output;
+                wet[ch] = l + m + h;
+            }
+
+            // Auto gain: match the processed loudness to the dry loudness.
+            float makeup = 1.0f;
+            if (p.autoGain)
+                makeup = agc.process (std::max (std::fabs (il), std::fabs (ir)),
+                                      std::max (std::fabs (wet[0]), std::fabs (wet[1])));
+
+            float out[2];
+            for (int ch = 0; ch < 2; ++ch)
+            {
+                const float x = (ch == 0) ? il : ir;
+                out[ch] = ((1.0f - p.mix) * x + p.mix * wet[ch] * makeup) * p.output;
             }
 
             vizBandBuf[0][static_cast<size_t> (w)] = bandAcc[0] * 0.5f;
