@@ -32,6 +32,7 @@ namespace
 TransientVisualizer::TransientVisualizer (ImpactAudioProcessor& p)
     : proc (p)
 {
+    setOpaque (true);   // draws its own panel over a flat bg — skip parent recomposite
     startTimerHz (30);
 }
 
@@ -93,6 +94,11 @@ void TransientVisualizer::spawnParticle()
 
 void TransientVisualizer::paint (juce::Graphics& g)
 {
+    {
+        auto wbg = getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId);
+        g.fillAll (wbg.isTransparent() ? juce::Colour (0xff0a0c10) : wbg);
+    }
+
     const auto b = getLocalBounds().toFloat();
 
     g.setColour (SympathyLookAndFeel::panel);
