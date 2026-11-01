@@ -103,7 +103,8 @@ namespace impact
 
         for (int b = 0; b < kNumBands; ++b)
             detector[(size_t) b].setTimes (sampleRate, p.band[(size_t) b].attackTime,
-                                                        p.band[(size_t) b].sustainTime);
+                                           sustainReleaseMs (p.band[(size_t) b].sustainTime,
+                                                             p.band[(size_t) b].sustainGain));
     }
 
     void TransientEngine::process (const float* inL, const float* inR,
@@ -134,9 +135,17 @@ namespace impact
             split[0].process (il, bandsL);
             split[1].process (ir, bandsR);
 
+            // Dry for the Mix control = the bands summed unprocessed. It carries the same
+            // all-pass phase as the wet bands; blending in the raw input instead would
+            // cancel against them (a deep notch near each crossover).
+            float dryL = 0.0f, dryR = 0.0f;
+
             float wetL = 0.0f, wetR = 0.0f;
             for (int b = 0; b < kNumBands; ++b)
             {
+                dryL += bandsL[b];
+                dryR += bandsR[b];
+
                 const auto& bp = p.band[(size_t) b];
                 const float mag = std::max (std::fabs (bandsL[b]), std::fabs (bandsR[b]));
 
@@ -180,8 +189,8 @@ namespace impact
                 makeup = agc.process (std::max (std::fabs (il), std::fabs (ir)),
                                       std::max (std::fabs (wetL), std::fabs (wetR)));
 
-            float lo = ((1.0f - effMix) * il + effMix * wetL * makeup) * p.output;
-            float ro = ((1.0f - effMix) * ir + effMix * wetR * makeup) * p.output;
+            float lo = ((1.0f - effMix) * dryL + effMix * wetL * makeup) * p.output;
+            float ro = ((1.0f - effMix) * dryR + effMix * wetR * makeup) * p.output;
             limiter.process (lo, ro);
             outL[i] = lo;
             outR[i] = ro;

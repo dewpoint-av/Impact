@@ -33,6 +33,25 @@ namespace impact
     static constexpr float kMaxSustainDb = 24.0f;
     static constexpr float kMaxPunchDb   = 12.0f;
 
+    // Sustain Time parameter range + skew (must match the susTime parameter layout).
+    static constexpr float kSustainTimeMinMs = 10.0f;
+    static constexpr float kSustainTimeMaxMs = 500.0f;
+    static constexpr float kSustainTimeSkew  = 0.5f;
+
+    // Sustain Time means body LENGTH, whichever way the gain goes: short = less body,
+    // long = more body. A longer detector release means a stronger sustain signal, which
+    // suits a boost, but a cut needs the reverse or a long setting removes the most body.
+    // So cuts use the release mirrored across the knob's travel (min <-> max).
+    inline float sustainReleaseMs (float sustainTimeMs, float sustainGain)
+    {
+        if (sustainGain >= 0.0f)
+            return sustainTimeMs;
+        const float range = kSustainTimeMaxMs - kSustainTimeMinMs;
+        const float prop  = std::clamp ((sustainTimeMs - kSustainTimeMinMs) / range, 0.0f, 1.0f);
+        const float knob  = 1.0f - std::pow (prop, kSustainTimeSkew);
+        return kSustainTimeMinMs + range * std::pow (knob, 1.0f / kSustainTimeSkew);
+    }
+
     enum SoloMode { SoloOff = 0, SoloTransient = 1, SoloBody = 2 };
 
     struct BandParams
